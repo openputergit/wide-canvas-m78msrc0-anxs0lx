@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroceryTrack - Inventory Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            .mobile-menu {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: #1a1a1a;
+                padding: 1rem;
+                display: flex;
+                justify-content: space-around;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+    <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <aside class="hidden md:flex w-64 flex-col space-y-2 p-4 bg-gray-800">
+            <div class="text-2xl font-bold mb-8">GroceryTrack</div>
+            <button class="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded active-nav" onclick="showSection('dashboard')">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span>Dashboard</span>
+            </button>
+            <button class="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded" onclick="showSection('inventory')">
+                <i class="bi bi-box-seam"></i>
+                <span>Inventory</span>
+            </button>
+            <button class="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded" onclick="showSection('sales')">
+                <i class="bi bi-cart-check"></i>
+                <span>Sales</span>
+            </button>
+            <button class="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded" onclick="showSection('reports')">
+                <i class="bi bi-file-earmark-text"></i>
+                <span>Reports</span>
+            </button>
+        </aside>
+
+        <!-- Mobile Menu -->
+        <div class="md:hidden mobile-menu">
+            <button onclick="showSection('dashboard')"><i class="bi bi-grid-1x2-fill"></i></button>
+            <button onclick="showSection('inventory')"><i class="bi bi-box-seam"></i></button>
+            <button onclick="showSection('sales')"><i class="bi bi-cart-check"></i></button>
+            <button onclick="showSection('reports')"><i class="bi bi-file-earmark-text"></i></button>
+        </div>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-6 overflow-auto pb-20 md:pb-6">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold">Total Products</h3>
+                        <p class="text-3xl font-bold" id="totalProducts">0</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold">Low Stock Items</h3>
+                        <p class="text-3xl font-bold text-yellow-500" id="lowStockCount">0</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold">Monthly Revenue</h3>
+                        <p class="text-3xl font-bold text-green-500" id="monthlyRevenue">$0</p>
+                    </div>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg">
+                    <canvas id="salesChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Inventory Section -->
+            <section id="inventory" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold">Inventory Management</h2>
+                    <button onclick="showAddProductModal()" class="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700">
+                        Add Product
+                    </button>
+                </div>
+                
+                <div class="flex space-x-4 mb-4">
+                    <input type="text" id="searchProduct" placeholder="Search products..." 
+                           class="bg-gray-700 p-2 rounded flex-1">
+                    <button onclick="scanBarcode()" class="bg-gray-700 p-2 rounded">
+                        <i class="bi bi-upc-scan"></i>
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-800">
+                            <tr>
+                                <th class="p-4">Name</th>
+                                <th class="p-4">Category</th>
+                                <th class="p-4">Quantity</th>
+                                <th class="p-4">Price</th>
+                                <th class="p-4">Expiry Date</th>
+                                <th class="p-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTable">
+                            <!-- Inventory items will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Sales Section -->
+            <section id="sales" class="hidden space-y-6">
+                <h2 class="text-2xl font-bold">Sales Recording</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">New Sale</h3>
+                        <div class="space-y-4">
+                            <input type="text" id="saleProduct" placeholder="Product name or barcode" 
+                                   class="w-full bg-gray-700 p-2 rounded">
+                            <input type="number" id="saleQuantity" placeholder="Quantity" 
+                                   class="w-full bg-gray-700 p-2 rounded">
+                            <button onclick="recordSale()" class="w-full bg-green-600 p-2 rounded hover:bg-green-700">
+                                Record Sale
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">Recent Sales</h3>
+                        <div id="recentSales" class="space-y-2">
+                            <!-- Recent sales will be added here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reports Section -->
+            <section id="reports" class="hidden space-y-6">
+                <h2 class="text-2xl font-bold">Reports & Analytics</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">Export Options</h3>
+                        <div class="space-y-4">
+                            <button onclick="exportReport('inventory')" class="w-full bg-blue-600 p-2 rounded hover:bg-blue-700">
+                                Export Inventory Report
+                            </button>
+                            <button onclick="exportReport('sales')" class="w-full bg-blue-600 p-2 rounded hover:bg-blue-700">
+                                Export Sales Report
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4">Best Selling Products</h3>
+                        <canvas id="bestSellersChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add Product Modal -->
+    <div id="addProductModal" class="fixed inset-0 bg-black bg-opacity-50 hidden">
+        <div class="bg-gray-800 p-6 rounded-lg w-96 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+            <h3 class="text-xl font-bold mb-4">Add New Product</h3>
+            <form id="addProductForm" class="space-y-4">
+                <input type="text" id="productName" placeholder="Product Name" required
+                       class="w-full bg-gray-700 p-2 rounded">
+                <select id="productCategory" class="w-full bg-gray-700 p-2 rounded">
+                    <option value="">Select Category</option>
+                    <option value="fruits">Fruits</option>
+                    <option value="vegetables">Vegetables</option>
+                    <option value="dairy">Dairy</option>
+                    <option value="meat">Meat</option>
+                    <option value="beverages">Beverages</option>
+                </select>
+                <input type="number" id="productQuantity" placeholder="Quantity" required
+                       class="w-full bg-gray-700 p-2 rounded">
+                <input type="number" id="productPrice" placeholder="Price" step="0.01" required
+                       class="w-full bg-gray-700 p-2 rounded">
+                <input type="date" id="productExpiry" required
+                       class="w-full bg-gray-700 p-2 rounded">
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="closeAddProductModal()" 
+                            class="bg-gray-600 px-4 py-2 rounded hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700">Add Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Utility Functions
+        const showLoading = () => document.getElementById('loading').classList.remove('hidden');
+        const hideLoading = () => document.getElementById('loading').classList.add('hidden');
+        
+        // Generate unique ID for local storage
+        const userId = localStorage.getItem('userId') || 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('userId', userId);
+        
+        const appSlug = 'grocery-inventory-app';
+
+        // Database Operations
+        async function dbOperation(action, table, data = null, id = null) {
+            showLoading();
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer UYSdOh2OoATpL4RjWNcj4yrqybj1',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        appSlug,
+                        action,
+                        table,
+                        id,
+                        data
+                    })
+                });
+                const result = await response.json();
+                hideLoading();
+                return result;
+            } catch (error) {
+                console.error('Database operation failed:', error);
+                hideLoading();
+                return { error: 'Operation failed' };
+            }
+        }
+
+        // Navigation
+        function showSection(sectionId) {
+            document.querySelectorAll('main > section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            document.getElementById(sectionId).classList.remove('hidden');
+            
+            if(sectionId === 'dashboard') {
+                updateDashboard();
+            } else if(sectionId === 'inventory') {
+                loadInventory();
+            }
+        }
+
+        // Product Management
+        function showAddProductModal() {
+            document.getElementById('addProductModal').classList.remove('hidden');
+        }
+
+        function closeAddProductModal() {
+            document.getElementById('addProductModal').classList.add('hidden');
+        }
+
+        document.getElementById('addProductForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const productData = {
+                name: document.getElementById('productName').value,
+                category: document.getElementById('productCategory').value,
+                quantity: parseInt(document.getElementById('productQuantity').value),
+                price: parseFloat(document.getElementById('productPrice').value),
+                expiryDate: document.getElementById('productExpiry').value
+            };
+
+            const result = await dbOperation('create', 'products', productData);
+            
+            if(!result.error) {
+                closeAddProductModal();
+                loadInventory();
+                document.getElementById('addProductForm').reset();
+            }
+        });
+
+        async function loadInventory() {
+            const result = await dbOperation('read', 'products');
+            
+            if(!result.error) {
+                const tableBody = document.getElementById('inventoryTable');
+                tableBody.innerHTML = '';
+                
+                result.data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="p-4">${item.data.name}</td>
+                        <td class="p-4">${item.data.category}</td>
+                        <td class="p-4">${item.data.quantity}</td>
+                        <td class="p-4">$${item.data.price}</td>
+                        <td class="p-4">${item.data.expiryDate}</td>
+                        <td class="p-4">
+                            <button onclick="editProduct('${item.id}')" class="text-blue-500 hover:text-blue-400 mr-2">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button onclick="deleteProduct('${item.id}')" class="text-red-500 hover:text-red-400">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+        }
+
+        async function deleteProduct(id) {
+            if(confirm('Are you sure you want to delete this product?')) {
+                const result = await dbOperation('delete', 'products', null, id);
+                if(!result.error) {
+                    loadInventory();
+                }
+            }
+        }
+
+        function scanBarcode() {
+            // Simulate barcode scanning
+            alert('Barcode scanner functionality would be implemented here');
+        }
+
+        // Sales Management
+        async function recordSale() {
+            const productName = document.getElementById('saleProduct').value;
+            const quantity = parseInt(document.getElementById('saleQuantity').value);
+
+            const saleData = {
+                productName,
+                quantity,
+                date: new Date().toISOString(),
+                total: 0 // This would be calculated based on product price
+            };
+
+            const result = await dbOperation('create', 'sales', saleData);
+            
+            if(!result.error) {
+                document.getElementById('saleProduct').value = '';
+                document.getElementById('saleQuantity').value = '';
+                loadRecentSales();
+                updateInventoryQuantity(productName, quantity);
+            }
+        }
+
+        async function loadRecentSales() {
+            const result = await dbOperation('read', 'sales');
+            
+            if(!result.error) {
+                const recentSales = document.getElementById('recentSales');
+                recentSales.innerHTML = '';
+                
+                result.data.slice(0, 5).forEach(sale => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-gray-700 p-2 rounded';
+                    div.innerHTML = `
+                        <p class="font-semibold">${sale.data.productName}</p>
+                        <p class="text-sm">Quantity: ${sale.data.quantity}</p>
+                        <p class="text-sm text-gray-400">${new Date(sale.data.date).toLocaleString()}</p>
+                    `;
+                    recentSales.appendChild(div);
+                });
+            }
+        }
+
+        // Dashboard & Charts
+        async function updateDashboard() {
+            // Update metrics
+            const inventory = await dbOperation('read', 'products');
+            const sales = await dbOperation('read', 'sales');
+            
+            if(!inventory.error && !sales.error) {
+                document.getElementById('totalProducts').textContent = inventory.data.length;
+                
+                const lowStock = inventory.data.filter(item => item.data.quantity < 10).length;
+                document.getElementById('lowStockCount').textContent = lowStock;
+                
+                const monthlyRevenue = sales.data.reduce((acc, sale) => acc + (sale.data.total || 0), 0);
+                document.getElementById('monthlyRevenue').textContent = `$${monthlyRevenue.toFixed(2)}`;
+                
+                // Update charts
+                updateSalesChart(sales.data);
+                updateBestSellersChart(sales.data);
+            }
+        }
+
+        function updateSalesChart(salesData) {
+            const ctx = document.getElementById('salesChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Monthly Sales',
+                        data: [0, 0, 0, 0, 0, 0], // This would be calculated from salesData
+                        borderColor: 'rgb(59, 130, 246)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateBestSellersChart(salesData) {
+            const ctx = document.getElementById('bestSellersChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Product 1', 'Product 2', 'Product 3', 'Product 4', 'Product 5'],
+                    datasets: [{
+                        label: 'Units Sold',
+                        data: [0, 0, 0, 0, 0], // This would be calculated from salesData
+                        backgroundColor: 'rgb(59, 130, 246)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        // Export Functions
+        function exportReport(type) {
+            // Simulate export functionality
+            alert(`${type.charAt(0).toUpperCase() + type.slice(1)} report would be exported here`);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            showSection('dashboard');
+        });
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
